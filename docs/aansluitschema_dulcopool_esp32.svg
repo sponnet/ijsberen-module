@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 740" width="1150" height="740" font-family="sans-serif">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font-size: 22px; font-weight: 700; fill: #0f172a; }
+      .subtitle { font-size: 13px; fill: #475569; }
+      .box-esp { fill: #1e293b; stroke: #0f172a; stroke-width: 2.5; rx: 12; }
+      .box-h28 { fill: #065f46; stroke: #064e3b; stroke-width: 2.5; rx: 12; }
+      .box-dulco { fill: #0369a1; stroke: #075985; stroke-width: 2.5; rx: 12; }
+      .box-title { font-size: 16px; font-weight: 700; fill: #ffffff; }
+      .box-sub { font-size: 12px; fill: #cbd5e1; }
+      .pin-bg { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; rx: 5; }
+      .pin-text { font-size: 12px; font-weight: 700; fill: #0f172a; }
+      .wire-label { font-size: 11px; font-weight: 600; fill: #334155; }
+      .note-box { fill: #fffbeb; stroke: #f59e0b; stroke-width: 1.5; rx: 8; }
+      .note-title { font-size: 13px; font-weight: 700; fill: #b45309; }
+      .note-text { font-size: 12px; fill: #78350f; }
+      .legend-box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 8; }
+    </style>
+  </defs>
+
+  <rect width="1150" height="740" class="bg" />
+
+  <text x="40" y="42" class="title">Aansluitschema: ProMinent DULCOPOOL Pro - H28 RS-485 - NodeMCU ESP32</text>
+  <text x="40" y="64" class="subtitle">3.3V UART naar Modbus RTU (RS-485) bedrading voor ESPHome temperatuur-uitlezing</text>
+
+  <rect x="40" y="100" width="270" height="400" class="box-esp" />
+  <text x="175" y="132" text-anchor="middle" class="box-title">NodeMCU ESP32 Wroom</text>
+  <text x="175" y="150" text-anchor="middle" class="box-sub">Art. N53 | 3.3V Logic | ESPHome</text>
+
+  <rect x="135" y="90" width="80" height="18" fill="#94a3b8" stroke="#475569" stroke-width="1.5" rx="3" />
+  <text x="175" y="103" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">USB-C (flashen)</text>
+
+  <rect x="200" y="185" width="95" height="30" class="pin-bg" />
+  <text x="247" y="204" text-anchor="middle" class="pin-text">3V3</text>
+
+  <rect x="200" y="235" width="95" height="30" class="pin-bg" />
+  <text x="247" y="254" text-anchor="middle" class="pin-text">GND</text>
+
+  <rect x="200" y="285" width="95" height="30" class="pin-bg" />
+  <text x="247" y="304" text-anchor="middle" class="pin-text">GPIO16 (RX2)</text>
+
+  <rect x="200" y="335" width="95" height="30" class="pin-bg" />
+  <text x="247" y="354" text-anchor="middle" class="pin-text">GPIO17 (TX2)</text>
+
+  <rect x="200" y="375" width="95" height="30" class="pin-bg" />
+  <text x="247" y="394" text-anchor="middle" class="pin-text">5V (VIN)</text>
+
+  <text x="175" y="462" text-anchor="middle" class="box-sub">WiFi -> ThingSpeak / Adafruit / Ubidots</text>
+  <text x="175" y="480" text-anchor="middle" class="box-sub">Baud: 19200 | 8N2 (geen pariteit) | Slave: 1</text>
+
+  <rect x="455" y="115" width="250" height="310" class="box-h28" />
+  <text x="580" y="147" text-anchor="middle" class="box-title">UART TTL to RS-485</text>
+  <text x="580" y="165" text-anchor="middle" class="box-sub">Art. H28 | 3.3V/5V Auto-Direction</text>
+
+  <rect x="470" y="185" width="80" height="30" class="pin-bg" />
+  <text x="510" y="204" text-anchor="middle" class="pin-text">VCC</text>
+
+  <rect x="470" y="235" width="80" height="30" class="pin-bg" />
+  <text x="510" y="254" text-anchor="middle" class="pin-text">GND</text>
+
+  <rect x="470" y="285" width="80" height="30" class="pin-bg" />
+  <text x="510" y="304" text-anchor="middle" class="pin-text">TXD</text>
+
+  <rect x="470" y="335" width="80" height="30" class="pin-bg" />
+  <text x="510" y="354" text-anchor="middle" class="pin-text">RXD</text>
+
+  <rect x="610" y="215" width="80" height="34" class="pin-bg" />
+  <text x="650" y="237" text-anchor="middle" class="pin-text">A+</text>
+
+  <rect x="610" y="275" width="80" height="34" class="pin-bg" />
+  <text x="650" y="297" text-anchor="middle" class="pin-text">B-</text>
+
+  <rect x="610" y="327" width="80" height="30" class="pin-bg" />
+  <text x="650" y="346" text-anchor="middle" class="pin-text">GND</text>
+
+  <text x="580" y="405" text-anchor="middle" class="box-sub">Geen DE/RE pinnen nodig</text>
+
+  <rect x="850" y="100" width="260" height="400" class="box-dulco" />
+  <text x="980" y="132" text-anchor="middle" class="box-title">ProMinent DULCOPOOL Pro</text>
+  <text x="980" y="150" text-anchor="middle" class="box-sub">Modbus RTU Slave (Adres 0x01)</text>
+
+  <rect x="865" y="215" width="130" height="34" class="pin-bg" />
+  <text x="930" y="237" text-anchor="middle" class="pin-text">Klem 31: RS485 A</text>
+
+  <rect x="865" y="275" width="130" height="34" class="pin-bg" />
+  <text x="930" y="297" text-anchor="middle" class="pin-text">Klem 32: RS485 B</text>
+
+  <rect x="865" y="325" width="130" height="30" class="pin-bg" />
+  <text x="930" y="345" text-anchor="middle" class="pin-text">Klem 18: C (GND)</text>
+
+  <rect x="865" y="372" width="130" height="30" class="pin-bg" />
+  <text x="930" y="392" text-anchor="middle" class="pin-text">Shield / PE</text>
+
+  <rect x="865" y="415" width="130" height="30" class="pin-bg" />
+  <text x="930" y="435" text-anchor="middle" class="pin-text">Klem 17: +12 V</text>
+
+  <text x="980" y="472" text-anchor="middle" class="box-sub">Temperatuur: 42009 (AI3) / 42011 (AI4)</text>
+  <text x="980" y="488" text-anchor="middle" class="box-sub">of 41203 (E1) | FP32_R, laag woord eerst</text>
+
+  <line x1="295" y1="200" x2="470" y2="200" stroke="#dc2626" stroke-width="3.5" />
+  <circle cx="295" cy="200" r="4.5" fill="#dc2626" />
+  <circle cx="470" cy="200" r="4.5" fill="#dc2626" />
+  <text x="382" y="193" text-anchor="middle" class="wire-label" fill="#dc2626">3.3V Voeding (Rood)</text>
+
+  <line x1="295" y1="250" x2="470" y2="250" stroke="#0f172a" stroke-width="3.5" />
+  <circle cx="295" cy="250" r="4.5" fill="#0f172a" />
+  <circle cx="470" cy="250" r="4.5" fill="#0f172a" />
+  <text x="382" y="243" text-anchor="middle" class="wire-label">GND Massa (Zwart)</text>
+
+  <line x1="295" y1="300" x2="470" y2="300" stroke="#16a34a" stroke-width="3.5" />
+  <circle cx="295" cy="300" r="4.5" fill="#16a34a" />
+  <circle cx="470" cy="300" r="4.5" fill="#16a34a" />
+  <text x="382" y="293" text-anchor="middle" class="wire-label" fill="#15803d">RX2 &lt;- TXD (Data In)</text>
+
+  <line x1="295" y1="350" x2="470" y2="350" stroke="#2563eb" stroke-width="3.5" />
+  <circle cx="295" cy="350" r="4.5" fill="#2563eb" />
+  <circle cx="470" cy="350" r="4.5" fill="#2563eb" />
+  <text x="382" y="343" text-anchor="middle" class="wire-label" fill="#1d4ed8">TX2 -&gt; RXD (Data Uit)</text>
+
+  <rect x="720" y="218" width="115" height="146" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,3" rx="8" />
+  <text x="777" y="210" text-anchor="middle" font-size="11" font-weight="700" fill="#475569">Cat6 S/FTP Twisted Pair</text>
+
+  <line x1="690" y1="232" x2="865" y2="232" stroke="#ea580c" stroke-width="4" />
+  <circle cx="690" cy="232" r="4.5" fill="#ea580c" />
+  <circle cx="865" cy="232" r="4.5" fill="#ea580c" />
+  <text x="777" y="247" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">Oranje (A+)</text>
+
+  <line x1="690" y1="292" x2="865" y2="292" stroke="#f97316" stroke-width="4" />
+  <line x1="690" y1="292" x2="865" y2="292" stroke="#ffffff" stroke-width="2" stroke-dasharray="6,6" />
+  <circle cx="690" cy="292" r="4.5" fill="#ea580c" />
+  <circle cx="865" cy="292" r="4.5" fill="#ea580c" />
+  <text x="777" y="283" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">Oranje/Wit (B-)</text>
+
+  <line x1="690" y1="340" x2="865" y2="340" stroke="#16a34a" stroke-width="4" />
+  <circle cx="690" cy="340" r="4.5" fill="#16a34a" />
+  <circle cx="865" cy="340" r="4.5" fill="#16a34a" />
+  <text x="777" y="331" text-anchor="middle" font-size="11" font-weight="700" fill="#15803d">Groen + groen/wit</text>
+  <text x="777" y="356" text-anchor="middle" font-size="10" font-weight="600" fill="#15803d">referentie-GND</text>
+
+  <path d="M 777 364 L 777 387 L 865 387" fill="none" stroke="#64748b" stroke-width="2.5" stroke-dasharray="4,3" />
+  <circle cx="865" cy="387" r="4.5" fill="#64748b" />
+  <text x="845" y="406" text-anchor="end" font-size="11" font-weight="600" fill="#475569">Afscherming: alleen hier</text>
+
+  <rect x="470" y="448" width="220" height="74" fill="#475569" stroke="#334155" stroke-width="2.5" rx="10" />
+  <text x="580" y="472" text-anchor="middle" class="box-title" font-size="14">Stepdown 12 V &#8594; 5 V</text>
+  <text x="580" y="491" text-anchor="middle" class="box-sub">bv. Recom R-78E5.0-0.5</text>
+  <text x="580" y="508" text-anchor="middle" class="box-sub">IN&#8722; / OUT&#8722; aan ESP32 GND</text>
+
+  <path d="M 295 390 L 420 390 L 420 482 L 470 482" fill="none" stroke="#dc2626" stroke-width="3.5" />
+  <circle cx="295" cy="390" r="4.5" fill="#dc2626" />
+  <circle cx="470" cy="482" r="4.5" fill="#dc2626" />
+  <text x="358" y="383" text-anchor="middle" class="wire-label" fill="#dc2626">5 V</text>
+
+  <path d="M 865 430 L 760 430 L 760 482 L 690 482" fill="none" stroke="#2563eb" stroke-width="4" />
+  <circle cx="865" cy="430" r="4.5" fill="#2563eb" />
+  <circle cx="690" cy="482" r="4.5" fill="#2563eb" />
+  <rect x="790" y="422" width="40" height="16" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5" rx="3" />
+  <text x="810" y="434" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">PTC</text>
+  <text x="810" y="452" text-anchor="middle" font-size="10" font-weight="600" fill="#1d4ed8">200 mA</text>
+  <text x="845" y="508" text-anchor="end" font-size="11" font-weight="700" fill="#1d4ed8">+12 V: blauw + blauw/wit</text>
+
+  <rect x="40" y="560" width="665" height="145" class="note-box" />
+  <text x="60" y="585" class="note-title">Belangrijke Montage- &amp; Veiligheidsinstructies</text>
+  <text x="60" y="607" class="note-text">1. Gebruik UITSLUITEND 3.3V op de H28-module (sluit VCC nooit aan op 5V/VIN van de ESP32).</text>
+  <text x="60" y="627" class="note-text">2. Kruis TX en RX: ESP32 GPIO16 (RX2) gaat naar TXD op H28; ESP32 GPIO17 (TX2) gaat naar RXD op H28.</text>
+  <text x="60" y="647" class="note-text">3. Sluit de metalen kabelafscherming (Shield) maar aan een kant aan om aardlussen te voorkomen.</text>
+  <text x="60" y="667" class="note-text">4. Regelaar spanningsloos voor openen; datakabel weg van 230V/400V pomp- en doseerkabels.</text>
+  <text x="60" y="687" class="note-text">5. Nooit 12 V rechtstreeks op de ESP32: altijd via stepdown + PTC. USB en 12 V niet tegelijk.</text>
+
+  <rect x="725" y="560" width="385" height="145" class="legend-box" />
+  <text x="745" y="585" font-size="13" font-weight="700" fill="#0f172a">Benodigde onderdelen</text>
+  <text x="745" y="607" font-size="12" fill="#334155">- NodeMCU ESP32 Wroom USB-C (Art. N53)</text>
+  <text x="745" y="627" font-size="12" fill="#334155">- UART TTL to RS485 Converter 3.3V (Art. H28)</text>
+  <text x="745" y="647" font-size="12" fill="#334155">- CAT 6 Patchkabel S/FTP PiMF (Art. N32 / N31)</text>
+  <text x="745" y="667" font-size="12" fill="#334155">- 6x Dupont F-F + USB-C-datakabel (flashen)</text>
+  <text x="745" y="687" font-size="12" fill="#334155">- Stepdown 12&#8594;5 V + PTC 200 mA</text>
+</svg>

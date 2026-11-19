@@ -1,0 +1,257 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" width="1400" height="900" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
+      .inner { fill: #f3f4f6; stroke: #9ca3af; stroke-width: 1.2; }
+      .title { font-weight: 700; font-size: 15px; fill: #111827; }
+      .sub { font-size: 11.5px; fill: #4b5563; }
+      .lbl { fill: #111827; }
+      .small { font-size: 11px; fill: #374151; }
+      .pin { fill: #111827; stroke: none; }
+      .w { fill: none; stroke-width: 3; stroke-linecap: round; }
+      .p5 { stroke: #dc2626; }
+      .p33 { stroke: #ea580c; }
+      .gnd { stroke: #111827; }
+      .rx { stroke: #059669; }
+      .tx { stroke: #2563eb; }
+      .ra { stroke: #9333ea; }
+      .rb { stroke: #0891b2; }
+      .rc { stroke: #6b7280; }
+      .L { stroke: #92400e; }
+      .N { stroke: #1d4ed8; }
+      .PE { stroke: #16a34a; stroke-dasharray: 10 5; }
+      .ma { stroke: #be185d; }
+      .term { fill: #fde68a; stroke: #92400e; stroke-width: 1.2; }
+      .tnum { font-size: 11px; font-weight: 700; fill: #78350f; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="900" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="44" font-size="22" font-weight="700" fill="#111827">IJsberen-module — bedradingsschema</text>
+  <text x="40" y="66" class="sub">DULCOPOOL Pro (Modbus RTU slave) ⇄ RS-485 ⇄ LilyGO T-A7670E (ESP32 + 4G) → backend</text>
+
+  <!-- ================= 230 V net ================= -->
+  <rect x="40" y="110" width="200" height="80" rx="6" class="box"/>
+  <text x="140" y="140" text-anchor="middle" class="title">230 V AC net</text>
+  <text x="140" y="160" text-anchor="middle" class="sub">via zekering / automaat</text>
+  <text x="90" y="182" text-anchor="middle" class="small">L</text>
+  <text x="140" y="182" text-anchor="middle" class="small">N</text>
+  <text x="190" y="182" text-anchor="middle" class="small">PE</text>
+
+  <line x1="90" y1="190" x2="90" y2="260" class="w L"/>
+  <line x1="140" y1="190" x2="140" y2="260" class="w N"/>
+  <line x1="190" y1="190" x2="190" y2="260" class="w PE"/>
+
+  <!-- ================= Voeding ================= -->
+  <rect x="40" y="260" width="200" height="150" rx="6" class="box"/>
+  <text x="90" y="280" text-anchor="middle" class="small">L</text>
+  <text x="140" y="280" text-anchor="middle" class="small">N</text>
+  <text x="190" y="280" text-anchor="middle" class="small">⏚</text>
+  <text x="130" y="320" text-anchor="middle" class="title">Mean Well</text>
+  <text x="130" y="338" text-anchor="middle" class="title">HDR-15-5</text>
+  <text x="130" y="358" text-anchor="middle" class="sub">5 V / 2,4 A DIN-rail</text>
+  <text x="232" y="324" text-anchor="end" class="small">+V</text>
+  <text x="232" y="364" text-anchor="end" class="small">−V</text>
+  <circle cx="240" cy="320" r="4" class="pin"/>
+  <circle cx="240" cy="360" r="4" class="pin"/>
+
+  <!-- PSU -> LilyGO -->
+  <line x1="240" y1="320" x2="340" y2="320" class="w p5"/>
+  <line x1="240" y1="360" x2="340" y2="360" class="w gnd"/>
+  <text x="290" y="312" text-anchor="middle" class="small">+5 V</text>
+  <text x="290" y="352" text-anchor="middle" class="small">GND</text>
+
+  <!-- ================= LilyGO T-A7670E ================= -->
+  <rect x="340" y="180" width="300" height="420" rx="8" class="box"/>
+  <text x="490" y="205" text-anchor="middle" class="title">LilyGO T-A7670E</text>
+
+  <rect x="395" y="222" width="140" height="55" rx="4" class="inner"/>
+  <text x="465" y="245" text-anchor="middle" class="lbl" font-weight="600">ESP32-WROVER-E</text>
+  <text x="465" y="263" text-anchor="middle" class="small">Modbus master</text>
+
+  <rect x="395" y="290" width="140" height="55" rx="4" class="inner"/>
+  <text x="465" y="313" text-anchor="middle" class="lbl" font-weight="600">SIMCom A7670E</text>
+  <text x="465" y="331" text-anchor="middle" class="small">LTE Cat-1 / GSM</text>
+
+  <rect x="395" y="358" width="140" height="40" rx="4" class="inner"/>
+  <text x="465" y="383" text-anchor="middle" class="small">Nano-SIM (pin uit)</text>
+
+  <rect x="395" y="411" width="140" height="50" rx="4" class="inner"/>
+  <text x="465" y="432" text-anchor="middle" class="lbl" font-weight="600">18650-cel</text>
+  <text x="465" y="449" text-anchor="middle" class="small">buffer / mini-UPS</text>
+
+  <text x="465" y="500" text-anchor="middle" class="small">GPIO 4/5/12/26/27 = intern</text>
+  <text x="465" y="516" text-anchor="middle" class="small">voor de modem (niet gebruiken)</text>
+
+  <!-- left pins -->
+  <circle cx="340" cy="320" r="4" class="pin"/>
+  <circle cx="340" cy="360" r="4" class="pin"/>
+  <text x="348" y="324" class="small" font-weight="700">5V</text>
+  <text x="348" y="364" class="small" font-weight="700">GND</text>
+
+  <!-- right pins -->
+  <circle cx="640" cy="300" r="4" class="pin"/>
+  <circle cx="640" cy="340" r="4" class="pin"/>
+  <circle cx="640" cy="380" r="4" class="pin"/>
+  <circle cx="640" cy="420" r="4" class="pin"/>
+  <text x="630" y="304" text-anchor="end" class="small" font-weight="700">3V3</text>
+  <text x="630" y="344" text-anchor="end" class="small" font-weight="700">GND</text>
+  <text x="630" y="384" text-anchor="end" class="small" font-weight="700">GPIO18 (RX2)</text>
+  <text x="630" y="424" text-anchor="end" class="small" font-weight="700">GPIO19 (TX2)</text>
+
+  <!-- USB-C bottom -->
+  <rect x="455" y="592" width="70" height="16" rx="5" fill="#d1d5db" stroke="#6b7280"/>
+  <text x="490" y="580" text-anchor="middle" class="small">USB-C (flashen / alt. 5 V)</text>
+
+  <!-- Antenna -->
+  <line x1="600" y1="180" x2="600" y2="120" stroke="#111827" stroke-width="2"/>
+  <path d="M600,120 L585,95 M600,120 L615,95 M600,120 L600,92" stroke="#111827" stroke-width="2" fill="none"/>
+  <text x="622" y="112" class="small">externe LTE-antenne</text>
+  <text x="622" y="127" class="small">(SMA/IPEX, kabel 2–3 m)</text>
+
+  <!-- LilyGO -> RS485 module -->
+  <line x1="640" y1="300" x2="760" y2="300" class="w p33"/>
+  <line x1="640" y1="340" x2="760" y2="340" class="w gnd"/>
+  <line x1="758" y1="380" x2="646" y2="380" class="w rx" marker-end="url(#arr)"/>
+  <line x1="640" y1="420" x2="754" y2="420" class="w tx" marker-end="url(#arr)"/>
+  <text x="700" y="292" text-anchor="middle" class="small">3,3 V</text>
+  <text x="700" y="332" text-anchor="middle" class="small">GND</text>
+  <text x="700" y="372" text-anchor="middle" class="small">data in</text>
+  <text x="700" y="412" text-anchor="middle" class="small">data uit</text>
+
+  <!-- ================= RS-485 module ================= -->
+  <text x="870" y="232" text-anchor="middle" class="title">RS-485-module</text>
+  <text x="870" y="250" text-anchor="middle" class="sub">geïsoleerd, auto-direction, 3,3 V</text>
+  <rect x="760" y="260" width="220" height="210" rx="6" class="box"/>
+  <line x1="870" y1="268" x2="870" y2="462" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="815" y="455" text-anchor="middle" class="small">logica</text>
+  <text x="925" y="455" text-anchor="middle" class="small">bus (iso)</text>
+
+  <circle cx="760" cy="300" r="4" class="pin"/>
+  <circle cx="760" cy="340" r="4" class="pin"/>
+  <circle cx="760" cy="380" r="4" class="pin"/>
+  <circle cx="760" cy="420" r="4" class="pin"/>
+  <text x="770" y="304" class="small" font-weight="700">VCC</text>
+  <text x="770" y="344" class="small" font-weight="700">GND</text>
+  <text x="770" y="384" class="small" font-weight="700">RXD / RO</text>
+  <text x="770" y="424" class="small" font-weight="700">TXD / DI</text>
+
+  <circle cx="980" cy="320" r="4" class="pin"/>
+  <circle cx="980" cy="360" r="4" class="pin"/>
+  <circle cx="980" cy="400" r="4" class="pin"/>
+  <text x="970" y="324" text-anchor="end" class="small" font-weight="700">A / D+</text>
+  <text x="970" y="364" text-anchor="end" class="small" font-weight="700">B / D−</text>
+  <text x="970" y="404" text-anchor="end" class="small" font-weight="700">GND iso</text>
+
+  <text x="870" y="490" text-anchor="middle" class="sub">bv. Waveshare TTL to RS485 (C)</text>
+
+  <!-- RS485 module -> DULCOPOOL -->
+  <rect x="996" y="306" width="88" height="108" rx="14" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <line x1="980" y1="320" x2="1100" y2="320" class="w ra"/>
+  <line x1="980" y1="360" x2="1100" y2="360" class="w rb"/>
+  <line x1="980" y1="400" x2="1100" y2="400" class="w rc"/>
+  <text x="1040" y="284" text-anchor="middle" class="small" font-weight="600">afgeschermd</text>
+  <text x="1040" y="299" text-anchor="middle" class="small" font-weight="600">twisted pair</text>
+  <!-- shield to earth -->
+  <line x1="1010" y1="414" x2="1010" y2="452" stroke="#16a34a" stroke-width="2" stroke-dasharray="5 3"/>
+  <line x1="996" y1="452" x2="1024" y2="452" stroke="#16a34a" stroke-width="2.5"/>
+  <line x1="1001" y1="458" x2="1019" y2="458" stroke="#16a34a" stroke-width="2.5"/>
+  <line x1="1006" y1="464" x2="1014" y2="464" stroke="#16a34a" stroke-width="2.5"/>
+  <text x="1040" y="484" text-anchor="middle" class="small">afscherming → PE</text>
+  <text x="1040" y="499" text-anchor="middle" class="small">(één kant)</text>
+
+  <!-- ================= Temperatuurtransmitter ================= -->
+  <rect x="760" y="555" width="220" height="95" rx="6" class="box" stroke-dasharray="6 4"/>
+  <text x="870" y="582" text-anchor="middle" class="title">Temperatuursensor</text>
+  <text x="870" y="601" text-anchor="middle" class="sub">4–20 mA transmitter (bestaand)</text>
+  <text x="870" y="618" text-anchor="middle" class="sub">schaal −5 … +45 °C</text>
+  <circle cx="980" cy="585" r="4" class="pin"/>
+  <circle cx="980" cy="625" r="4" class="pin"/>
+  <text x="970" y="640" text-anchor="end" class="small" font-weight="700">+ / −</text>
+  <line x1="980" y1="585" x2="1100" y2="585" class="w ma"/>
+  <line x1="980" y1="625" x2="1100" y2="625" class="w ma" stroke-dasharray="8 4"/>
+  <text x="1040" y="577" text-anchor="middle" class="small">+</text>
+  <text x="1040" y="617" text-anchor="middle" class="small">−</text>
+
+  <!-- ================= DULCOPOOL Pro ================= -->
+  <rect x="1100" y="140" width="260" height="560" rx="8" class="box"/>
+  <text x="1230" y="172" text-anchor="middle" class="title">ProMinent DULCOPOOL Pro</text>
+  <text x="1230" y="191" text-anchor="middle" class="sub">Modbus RTU slave · adres 1</text>
+  <text x="1230" y="207" text-anchor="middle" class="sub">19200 baud · geen pariteit</text>
+
+  <!-- mains to controller -->
+  <line x1="1300" y1="140" x2="1300" y2="100" class="w L"/>
+  <line x1="1320" y1="140" x2="1320" y2="100" class="w N"/>
+  <line x1="1340" y1="140" x2="1340" y2="100" class="w PE"/>
+  <text x="1290" y="96" text-anchor="end" class="small">100–230 V AC (eigen voeding)</text>
+
+  <!-- terminals -->
+  <g>
+    <rect x="1100" y="310" width="26" height="20" class="term"/><text x="1113" y="324" text-anchor="middle" class="tnum">31</text>
+    <text x="1134" y="324" class="lbl" font-weight="600">RS485 (A)</text>
+    <rect x="1100" y="350" width="26" height="20" class="term"/><text x="1113" y="364" text-anchor="middle" class="tnum">32</text>
+    <text x="1134" y="364" class="lbl" font-weight="600">RS485 (B)</text>
+    <rect x="1100" y="390" width="26" height="20" class="term"/><text x="1113" y="404" text-anchor="middle" class="tnum">18</text>
+    <text x="1134" y="404" class="lbl" font-weight="600">C (GND)</text>
+
+    <rect x="1100" y="575" width="26" height="20" class="term"/><text x="1113" y="589" text-anchor="middle" class="tnum">9</text>
+    <text x="1134" y="589" class="lbl" font-weight="600">AI3 +</text>
+    <rect x="1100" y="615" width="26" height="20" class="term"/><text x="1113" y="629" text-anchor="middle" class="tnum">10</text>
+    <text x="1134" y="629" class="lbl" font-weight="600">AI3 −</text>
+    <text x="1134" y="652" class="small">(of AI4: klem 11 / 12)</text>
+  </g>
+
+  <text x="1134" y="248" class="small">klem 17 (+12 V sensorvoeding)</text>
+  <text x="1134" y="263" class="small">niet gebruikt</text>
+
+  <!-- DIP switches -->
+  <rect x="1124" y="440" width="222" height="112" rx="5" class="inner"/>
+  <text x="1135" y="460" class="lbl" font-weight="700">Microschakelaars (printkaart)</text>
+  <g transform="translate(1138,470)">
+    <rect x="0" y="0" width="18" height="30" rx="2" fill="#fff" stroke="#374151"/><rect x="3" y="3" width="12" height="12" fill="#374151"/>
+    <rect x="24" y="0" width="18" height="30" rx="2" fill="#fff" stroke="#374151"/><rect x="27" y="3" width="12" height="12" fill="#374151"/>
+    <rect x="48" y="0" width="18" height="30" rx="2" fill="#fff" stroke="#374151"/><rect x="51" y="15" width="12" height="12" fill="#9ca3af"/>
+  </g>
+  <text x="1212" y="482" class="small">RS+ (A), RS− (B): bias</text>
+  <text x="1212" y="497" class="small">RS: 120 Ω afsluiting</text>
+  <text x="1135" y="522" class="small">Bias ON als de module geen bias</text>
+  <text x="1135" y="537" class="small">heeft · RS ON bij kabel &gt; ±10 m</text>
+
+  <text x="1135" y="680" class="small">Menu → Settings → Communication → MODBUS</text>
+
+  <!-- ================= Legend ================= -->
+  <rect x="40" y="720" width="640" height="150" rx="6" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="56" y="745" class="lbl" font-weight="700">Legende</text>
+  <g class="small">
+    <line x1="56" y1="768" x2="96" y2="768" class="w p5"/><text x="104" y="772">+5 V voeding</text>
+    <line x1="56" y1="792" x2="96" y2="792" class="w p33"/><text x="104" y="796">+3,3 V logica</text>
+    <line x1="56" y1="816" x2="96" y2="816" class="w gnd"/><text x="104" y="820">GND (logica)</text>
+    <line x1="56" y1="840" x2="96" y2="840" class="w L"/><line x1="56" y1="852" x2="96" y2="852" class="w N"/><text x="104" y="850">230 V: L (bruin) / N (blauw)</text>
+
+    <line x1="270" y1="768" x2="310" y2="768" class="w rx"/><text x="318" y="772">UART RX (module → ESP32)</text>
+    <line x1="270" y1="792" x2="310" y2="792" class="w tx"/><text x="318" y="796">UART TX (ESP32 → module)</text>
+    <line x1="270" y1="816" x2="310" y2="816" class="w ra"/><text x="318" y="820">RS-485 A</text>
+    <line x1="400" y1="816" x2="440" y2="816" class="w rb"/><text x="448" y="820">RS-485 B</text>
+    <line x1="270" y1="840" x2="310" y2="840" class="w rc"/><text x="318" y="844">RS-485 referentie (C)</text>
+
+    <line x1="490" y1="768" x2="530" y2="768" class="w PE"/><text x="538" y="772">PE / aarde</text>
+    <line x1="490" y1="792" x2="530" y2="792" class="w ma"/><text x="538" y="796">4–20 mA lus</text>
+    <rect x="490" y="806" width="40" height="18" class="term"/><text x="538" y="820">klem regelaar</text>
+  </g>
+
+  <!-- ================= Notes ================= -->
+  <rect x="700" y="720" width="660" height="150" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="716" y="745" class="lbl" font-weight="700">Let op</text>
+  <g class="small">
+    <text x="716" y="768">• Geen antwoord via Modbus? Wissel eerst A en B om (naamgeving verschilt per fabrikant).</text>
+    <text x="716" y="788">• RX/TX-labels op modules zijn soms vanuit de MCU benoemd: werkt het niet, wissel GPIO18/19.</text>
+    <text x="716" y="808">• Schakel de regelaar spanningsloos voor je de behuizing opent (microschakelaars).</text>
+    <text x="716" y="828">• Controleer de vrije GPIO's in utilities.h van de LilyGO-repo voor jouw boardversie.</text>
+    <text x="716" y="848">• Klemnummers uit de handleiding (p. 28–31, 66–68); controleer de opdruk op de regelaar.</text>
+  </g>
+</svg>

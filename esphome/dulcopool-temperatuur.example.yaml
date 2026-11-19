@@ -1,0 +1,258 @@
+# IJsberen-module – watertemperatuur uit de ProMinent DULCOPOOL Pro (Modbus RTU)
+# en elke 15 minuten naar ThingSpeak, Adafruit IO en Ubidots.
+#
+# Kopieer naar dulcopool-temperatuur.yaml en vul adafruit_username in.
+# Geheimen (Wi-Fi, API-sleutels, wachtwoorden) staan in secrets.yaml.
+# Maak die aan vanuit secrets.example.yaml; zie README §9.
+
+substitutions:
+  device_name: dulcopool-temperatuur
+
+  # Welke Modbus-waarde is de watertemperatuur? Kies na de test ter plaatse (README §8.3):
+  #   temp_ai3 = register 42009 (sensor op AI3, klemmen 9/10)
+  #   temp_ai4 = register 42011 (sensor op AI4, klemmen 11/12)
+  #   temp_e1  = register 41203 (meetwaarde van regelkanaal E1)
+  temp_bron: temp_ai3
+
+  publish_interval: 15min
+
+  # Niet-geheime cloudgegevens
+  adafruit_username: "JOUW_ADAFRUIT_GEBRUIKERSNAAM"
+  adafruit_feed: zwembad-temperatuur
+  ubidots_host: industrial.api.ubidots.com
+  ubidots_device: dulcopool-pro
+
+esphome:
+  name: ${device_name}
+  friendly_name: DULCOPOOL temperatuur
+  on_boot:
+    priority: -100
+    then:
+      # Eerste verzending kort na het opstarten, daarna elke ${publish_interval}
+      - delay: 2min
+      - script.execute: publiceer
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Lukt Wi-Fi niet, dan start een eigen hotspot om het netwerk in te stellen
+  ap:
+    ssid: "${device_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# Lokale webpagina met live waarden, logs en knoppen: http://dulcopool-temperatuur.local
+web_server:
+  port: 80
+  auth:
+    username: admin
+    password: !secret web_password
+
+http_request:
+  useragent: esphome/ijsberen-dulcopool
+  timeout: 10s
+  # verify_ssl staat standaard aan: certificaten worden gecontroleerd met de ESP-IDF-bundel
+
+# RS-485 via de H28-module (automatische richting, geen DE/RE-pin)
+uart:
+  id: rs485_uart
+  tx_pin: GPIO17
+  rx_pin: GPIO16
+  baud_rate: 19200
+  data_bits: 8
+  parity: NONE   # handleiding p. 70–71: pariteit "geen"
+  stop_bits: 2   # zonder pariteit gebruikt de regelaar 2 stopbits
+
+modbus:
+  id: modbus_bus
+  uart_id: rs485_uart
+
+modbus_controller:
+  - id: dulcopool
+    modbus_id: modbus_bus
+    address: 1
+    update_interval: 30s
+
+globals:
+  - id: laatste_meting_ms
+    type: uint32_t
+    initial_value: "0"
+
+sensor:
+  # Alle registers zijn holding registers (FC03); adres = register − 40001.
+  # REAL-waarden zijn IEEE-754 floats met het laag woord eerst → FP32_R.
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: temp_ai3
+    name: "AI3 sensorwaarde (42009)"
+    register_type: holding
+    address: 2008
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: temp_ai4
+    name: "AI4 sensorwaarde (42011)"
+    register_type: holding
+    address: 2010
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: temp_e1
+    name: "E1 meetwaarde (41203)"
+    register_type: holding
+    address: 1202
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  # Ruwe ingangsstroom, om te controleren dat de sensor 4–20 mA levert
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: stroom_ai3
+    name: "AI3 stroom (41009)"
+    register_type: holding
+    address: 1008
+    value_type: FP32_R
+    unit_of_measurement: mA
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: stroom_ai4
+    name: "AI4 stroom (41011)"
+    register_type: holding
+    address: 1010
+    value_type: FP32_R
+    unit_of_measurement: mA
+    accuracy_decimals: 2
+
+  # De waarde die naar de cloud gaat
+  - platform: copy
+    source_id: ${temp_bron}
+    id: watertemperatuur
+    name: "Watertemperatuur"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      # Onmogelijke waarden weggooien (schaal regelaar: −10…100 °C, water: −2…40 °C)
+      - lambda: |-
+          if (std::isnan(x) || x < -5.0f || x > 45.0f) return {};
+          return x;
+    on_value:
+      - lambda: id(laatste_meting_ms) = millis();
+
+  - platform: wifi_signal
+    id: wifi_rssi
+    name: "Wi-Fi signaal"
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Uptime"
+
+binary_sensor:
+  # Aan zolang er de laatste 2 minuten een geldige temperatuur binnenkwam.
+  # Zonder deze controle zou na een Modbus-storing de oude waarde blijven doorgestuurd worden.
+  - platform: template
+    id: meting_actueel
+    name: "Meting actueel"
+    lambda: |-
+      return id(laatste_meting_ms) != 0 && (millis() - id(laatste_meting_ms)) < 120000;
+
+button:
+  - platform: template
+    name: "Nu naar de cloud sturen"
+    on_press:
+      - script.execute: publiceer
+  - platform: restart
+    name: "Herstarten"
+
+interval:
+  - interval: ${publish_interval}
+    then:
+      - script.execute: publiceer
+
+script:
+  - id: publiceer
+    mode: single
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: meting_actueel
+          then:
+            - logger.log:
+                format: "Versturen: %.2f °C"
+                args: [id(watertemperatuur).state]
+
+            # 1. ThingSpeak – field1 = temperatuur, field2 = Wi-Fi-signaal
+            - http_request.post:
+                url: https://api.thingspeak.com/update.json
+                request_headers:
+                  Content-Type: application/json
+                  THINGSPEAKAPIKEY: !secret thingspeak_write_key
+                json: |-
+                  root["field1"] = round(id(watertemperatuur).state * 100.0) / 100.0;
+                  if (!std::isnan(id(wifi_rssi).state)) root["field2"] = (int) id(wifi_rssi).state;
+                on_response:
+                  - logger.log:
+                      format: "ThingSpeak: HTTP %d"
+                      args: [response->status_code]
+                on_error:
+                  - logger.log:
+                      level: WARN
+                      format: "ThingSpeak: verzenden mislukt"
+
+            # 2. Adafruit IO
+            - http_request.post:
+                url: https://io.adafruit.com/api/v2/${adafruit_username}/feeds/${adafruit_feed}/data
+                request_headers:
+                  Content-Type: application/json
+                  X-AIO-Key: !secret adafruit_aio_key
+                json: |-
+                  root["value"] = round(id(watertemperatuur).state * 100.0) / 100.0;
+                on_response:
+                  - logger.log:
+                      format: "Adafruit IO: HTTP %d"
+                      args: [response->status_code]
+                on_error:
+                  - logger.log:
+                      level: WARN
+                      format: "Adafruit IO: verzenden mislukt"
+
+            # 3. Ubidots
+            - http_request.post:
+                url: https://${ubidots_host}/api/v1.6/devices/${ubidots_device}
+                request_headers:
+                  Content-Type: application/json
+                  X-Auth-Token: !secret ubidots_token
+                json: |-
+                  root["temperatuur"] = round(id(watertemperatuur).state * 100.0) / 100.0;
+                on_response:
+                  - logger.log:
+                      format: "Ubidots: HTTP %d"
+                      args: [response->status_code]
+                on_error:
+                  - logger.log:
+                      level: WARN
+                      format: "Ubidots: verzenden mislukt"
+          else:
+            - logger.log:
+                level: WARN
+                format: "Geen actuele temperatuurmeting: niets verstuurd"

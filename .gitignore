@@ -1,0 +1,11 @@
+# Geheimen en persoonlijke configuratie (zie esphome/*.example.yaml)
+esphome/secrets.yaml
+esphome/dulcopool-temperatuur.yaml
+esphome/.esphome/
+
+# Uittreksels uit de handleiding van ProMinent (auteursrecht): alleen lokaal
+docs/klemmen/
+
+# Systeem- en editorbestanden
+.DS_Store
+.claude/
