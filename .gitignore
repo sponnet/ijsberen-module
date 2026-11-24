@@ -2,6 +2,9 @@
 esphome/secrets.yaml
 esphome/dulcopool-temperatuur.yaml
 esphome/.esphome/
+ES3C50P/secrets.yaml
+ES3C50P/dulcopool-scherm.yaml
+ES3C50P/.esphome/
 
 # Uittreksels uit de handleiding van ProMinent (auteursrecht): alleen lokaal
 docs/klemmen/

@@ -1,0 +1,859 @@
+# IJsberen-module, schermversie op het ES3C50P-bord (ESP32-S3 + 5"-touchscreen 800×480).
+# Leest de watertemperatuur uit de ProMinent DULCOPOOL Pro (Modbus RTU via de H28-module),
+# stuurt ze elke 15 minuten naar ThingSpeak, Adafruit IO en Ubidots en toont ze op het scherm:
+#   tab 1 "Temperatuur": huidige waarde en grafiek van de laatste 24 uur
+#   tab 2 "Info":        netwerk, cloud, Modbus, uptime, helderheid en knoppen
+#
+# Kopieer naar dulcopool-scherm.yaml en vul adafruit_username in.
+# Geheimen komen uit secrets.yaml in deze map (symlink naar ../esphome/secrets.yaml, zie README).
+
+substitutions:
+  device_name: dulcopool-scherm
+
+  # Welke Modbus-waarde is de watertemperatuur? (README hoofdmap §8.3)
+  #   temp_ai3 = register 42009, temp_ai4 = register 42011, temp_e1 = register 41203
+  temp_bron: temp_ai3
+
+  publish_interval: 15min
+
+  # PSRAM-type van de ESP32-S3-module: kijk op het metalen kapje van de module.
+  #   N16R8 / N8R8 → octal   (zo staat het in de specificaties van de ES3C50P)
+  #   N8R2 / N4R2  → quad    (zo staat het in het bordschema)
+  psram_mode: octal
+
+  # Niet-geheime cloudgegevens
+  adafruit_username: "JOUW_ADAFRUIT_GEBRUIKERSNAAM"
+  adafruit_feed: zwembad-temperatuur
+  ubidots_host: industrial.api.ubidots.com
+  ubidots_device: dulcopool-pro
+
+esphome:
+  name: ${device_name}
+  friendly_name: DULCOPOOL scherm
+  platformio_options:
+    # De grafiek gebruikt het LVGL-chartwidget, dat ESPHome niet in YAML aanbiedt.
+    build_flags:
+      - "-DLV_USE_CHART=1"
+  on_boot:
+    - priority: -100
+      then:
+        - delay: 2min
+        - script.execute: publiceer
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 8MB # werkt op 8 MB- en 16 MB-modules
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      # Aanbevolen voor RGB-schermen: minder flikkeren tijdens Wi-Fi- en flash-verkeer
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+
+psram:
+  mode: ${psram_mode}
+  speed: 80MHz
+
+# De USB-C-poort loopt via een CH340C naar UART0: logs en flashen gaan daarlangs.
+logger:
+  level: DEBUG
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${device_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+web_server:
+  port: 80
+  auth:
+    username: admin
+    password: !secret web_password
+
+http_request:
+  useragent: esphome/ijsberen-dulcopool-scherm
+  timeout: 10s
+
+time:
+  - platform: sntp
+    id: klok
+    timezone: Europe/Brussels
+
+# ---------------------------------------------------------------------------
+# RS-485 via de H28-module op header P3 ("SPI interface"):
+#   P3 pin 2 = IO11 → H28 RXD     P3 pin 4 = IO13 ← H28 TXD
+#   3,3 V en GND voor de H28 van header P5 (pin 2 = 3,3 V, pin 1 = GND).
+# IO11/IO13 zijn de SPI-lijnen van het microSD-slot: laat dat slot leeg.
+# IO17/IO18 (header P5) kan niet zonder solderen: IO18 is via R16 (0 Ω) met de
+# interruptlijn van de touchcontroller verbonden.
+# ---------------------------------------------------------------------------
+uart:
+  id: rs485_uart
+  tx_pin: GPIO11
+  rx_pin: GPIO13
+  baud_rate: 19200
+  data_bits: 8
+  parity: NONE
+  stop_bits: 2
+
+modbus:
+  id: modbus_bus
+  uart_id: rs485_uart
+
+modbus_controller:
+  - id: dulcopool
+    modbus_id: modbus_bus
+    address: 1
+    update_interval: 30s
+
+# ---------------------------------------------------------------------------
+# Scherm, touch en achtergrondverlichting
+# ---------------------------------------------------------------------------
+display:
+  - platform: mipi_rgb
+    # Het ES3C50P-bord heeft dezelfde pinnen en timing als de Sunton ESP32-8048S050
+    model: ESP32-8048S050
+    id: scherm
+    update_interval: never
+    auto_clear_enabled: false
+
+i2c:
+  sda: GPIO19
+  scl: GPIO20
+  frequency: 400kHz
+
+touchscreen:
+  - platform: gt911
+    id: touch
+    display: scherm
+    interrupt_pin: GPIO18
+    reset_pin: GPIO38
+    on_touch:
+      # Tik op een gedimd scherm: terug naar de ingestelde helderheid
+      - if:
+          condition:
+            lambda: return id(gedimd);
+          then:
+            - lambda: id(gedimd) = false;
+            - light.turn_on:
+                id: achtergrondlicht
+                brightness: !lambda return id(helderheid) / 100.0f;
+
+output:
+  - platform: ledc
+    id: backlight_pwm
+    pin: GPIO2 # EN/PWM van de SY7200-backlightdriver
+    frequency: 1kHz
+
+light:
+  - platform: monochromatic
+    id: achtergrondlicht
+    name: "Scherm achtergrondlicht"
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 300ms
+
+# ---------------------------------------------------------------------------
+# Toestand
+# ---------------------------------------------------------------------------
+globals:
+  - id: laatste_meting_ms
+    type: uint32_t
+    initial_value: "0"
+  # Grafiek: één punt per 5 minuten, 288 punten = 24 uur. Waarden in °C, NAN = gat.
+  - id: historiek
+    type: std::vector<float>
+  - id: grafiek
+    type: lv_obj_t *
+    initial_value: "nullptr"
+  - id: grafiek_reeks
+    type: lv_chart_series_t *
+    initial_value: "nullptr"
+  - id: eerste_punt_gezet
+    type: bool
+    initial_value: "false"
+  # Resultaat van de laatste verzending per dienst (HTTP-code; 0 = nog niet, -1 = mislukt)
+  - id: http_thingspeak
+    type: int
+    initial_value: "0"
+  - id: http_adafruit
+    type: int
+    initial_value: "0"
+  - id: http_ubidots
+    type: int
+    initial_value: "0"
+  - id: laatste_verzending_ms
+    type: uint32_t
+    initial_value: "0"
+  # Scherm
+  - id: helderheid
+    type: int
+    restore_value: true
+    initial_value: "80"
+  - id: gedimd
+    type: bool
+    initial_value: "false"
+
+sensor:
+  # Alle registers zijn holding registers (FC03); adres = register − 40001; FP32_R = laag woord eerst.
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: temp_ai3
+    name: "AI3 sensorwaarde (42009)"
+    register_type: holding
+    address: 2008
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: temp_ai4
+    name: "AI4 sensorwaarde (42011)"
+    register_type: holding
+    address: 2010
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: temp_e1
+    name: "E1 meetwaarde (41203)"
+    register_type: holding
+    address: 1202
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: stroom_ai3
+    name: "AI3 stroom (41009)"
+    register_type: holding
+    address: 1008
+    value_type: FP32_R
+    unit_of_measurement: mA
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: stroom_ai4
+    name: "AI4 stroom (41011)"
+    register_type: holding
+    address: 1010
+    value_type: FP32_R
+    unit_of_measurement: mA
+    accuracy_decimals: 2
+
+  - platform: copy
+    source_id: ${temp_bron}
+    id: watertemperatuur
+    name: "Watertemperatuur"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (std::isnan(x) || x < -5.0f || x > 45.0f) return {};
+          return x;
+    on_value:
+      - lambda: |-
+          id(laatste_meting_ms) = millis();
+          // Eerste geldige meting na het opstarten meteen in de grafiek zetten
+          if (!id(eerste_punt_gezet)) {
+            id(eerste_punt_gezet) = true;
+            id(grafiek_punt).execute();
+          }
+          id(toon_temperatuur).execute();
+
+  - platform: wifi_signal
+    id: wifi_rssi
+    name: "Wi-Fi signaal"
+    update_interval: 60s
+
+  - platform: uptime
+    id: uptime_s
+    name: "Uptime"
+    update_interval: 10s
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      id: wifi_ip
+      name: "IP-adres"
+    ssid:
+      id: wifi_ssid_txt
+      name: "Wi-Fi netwerk"
+    mac_address:
+      id: wifi_mac
+      name: "MAC-adres"
+  - platform: version
+    id: fw_versie
+    name: "Firmwareversie"
+    hide_timestamp: false
+
+binary_sensor:
+  - platform: template
+    id: meting_actueel
+    name: "Meting actueel"
+    lambda: |-
+      return id(laatste_meting_ms) != 0 && (millis() - id(laatste_meting_ms)) < 120000;
+    on_state:
+      - script.execute: toon_temperatuur
+
+switch:
+  # Uitzetten als de NodeMCU-module ook naar dezelfde kanalen stuurt (anders dubbele punten)
+  - platform: template
+    id: cloud_aan
+    name: "Cloud-verzending"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - lvgl.widget.update:
+          id: sw_cloud
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: sw_cloud
+          state:
+            checked: false
+
+button:
+  - platform: template
+    name: "Nu naar de cloud sturen"
+    on_press:
+      - script.execute: publiceer
+  - platform: restart
+    id: herstart
+    name: "Herstarten"
+
+interval:
+  - interval: ${publish_interval}
+    then:
+      - script.execute: publiceer
+  - interval: 5min
+    then:
+      - script.execute: grafiek_punt
+  - interval: 2s
+    then:
+      - script.execute: toon_info
+
+# ---------------------------------------------------------------------------
+# Scripts
+# ---------------------------------------------------------------------------
+script:
+  - id: publiceer
+    mode: single
+    then:
+      - if:
+          condition:
+            not:
+              switch.is_on: cloud_aan
+          then:
+            - logger.log: "Cloud-verzending staat uit"
+          else:
+            - if:
+                condition:
+                  binary_sensor.is_on: meting_actueel
+                then:
+                  - lambda: id(laatste_verzending_ms) = millis();
+                  - logger.log:
+                      format: "Versturen: %.2f °C"
+                      args: [id(watertemperatuur).state]
+
+                  - http_request.post:
+                      url: https://api.thingspeak.com/update.json
+                      request_headers:
+                        Content-Type: application/json
+                        THINGSPEAKAPIKEY: !secret thingspeak_write_key
+                      json: |-
+                        root["field1"] = round(id(watertemperatuur).state * 100.0) / 100.0;
+                        if (!std::isnan(id(wifi_rssi).state)) root["field2"] = (int) id(wifi_rssi).state;
+                      on_response:
+                        - lambda: id(http_thingspeak) = response->status_code;
+                        - logger.log:
+                            format: "ThingSpeak: HTTP %d"
+                            args: [response->status_code]
+                      on_error:
+                        - lambda: id(http_thingspeak) = -1;
+                        - logger.log:
+                            level: WARN
+                            format: "ThingSpeak: verzenden mislukt"
+
+                  - http_request.post:
+                      url: https://io.adafruit.com/api/v2/${adafruit_username}/feeds/${adafruit_feed}/data
+                      request_headers:
+                        Content-Type: application/json
+                        X-AIO-Key: !secret adafruit_aio_key
+                      json: |-
+                        root["value"] = round(id(watertemperatuur).state * 100.0) / 100.0;
+                      on_response:
+                        - lambda: id(http_adafruit) = response->status_code;
+                        - logger.log:
+                            format: "Adafruit IO: HTTP %d"
+                            args: [response->status_code]
+                      on_error:
+                        - lambda: id(http_adafruit) = -1;
+                        - logger.log:
+                            level: WARN
+                            format: "Adafruit IO: verzenden mislukt"
+
+                  - http_request.post:
+                      url: https://${ubidots_host}/api/v1.6/devices/${ubidots_device}
+                      request_headers:
+                        Content-Type: application/json
+                        X-Auth-Token: !secret ubidots_token
+                      json: |-
+                        root["temperatuur"] = round(id(watertemperatuur).state * 100.0) / 100.0;
+                      on_response:
+                        - lambda: id(http_ubidots) = response->status_code;
+                        - logger.log:
+                            format: "Ubidots: HTTP %d"
+                            args: [response->status_code]
+                      on_error:
+                        - lambda: id(http_ubidots) = -1;
+                        - logger.log:
+                            level: WARN
+                            format: "Ubidots: verzenden mislukt"
+                else:
+                  - logger.log:
+                      level: WARN
+                      format: "Geen actuele temperatuurmeting: niets verstuurd"
+
+  # Maakt het LVGL-chartwidget aan in het vak op tab 1 (één keer, bij het opstarten)
+  - id: maak_grafiek
+    then:
+      - lambda: |-
+          if (id(grafiek) != nullptr) return;
+          lv_obj_t *c = lv_chart_create(id(grafiek_vak));
+          lv_obj_set_size(c, lv_pct(100), lv_pct(100));
+          lv_obj_center(c);
+          lv_chart_set_type(c, LV_CHART_TYPE_LINE);
+          lv_chart_set_point_count(c, 288);
+          lv_chart_set_update_mode(c, LV_CHART_UPDATE_MODE_SHIFT);
+          lv_chart_set_div_line_count(c, 5, 5);
+          lv_chart_set_axis_range(c, LV_CHART_AXIS_PRIMARY_Y, 200, 300);
+          lv_obj_set_style_bg_color(c, lv_color_hex(0x0F1B2A), LV_PART_MAIN);
+          lv_obj_set_style_bg_opa(c, LV_OPA_COVER, LV_PART_MAIN);
+          lv_obj_set_style_border_color(c, lv_color_hex(0x2A3B50), LV_PART_MAIN);
+          lv_obj_set_style_line_color(c, lv_color_hex(0x2A3B50), LV_PART_MAIN);
+          lv_obj_set_style_pad_all(c, 0, LV_PART_MAIN);
+          lv_obj_set_style_line_width(c, 3, LV_PART_ITEMS);
+          lv_obj_set_style_width(c, 0, LV_PART_INDICATOR);
+          lv_obj_set_style_height(c, 0, LV_PART_INDICATOR);
+          lv_obj_remove_flag(c, LV_OBJ_FLAG_CLICKABLE);
+          id(grafiek_reeks) = lv_chart_add_series(c, lv_color_hex(0x38BDF8), LV_CHART_AXIS_PRIMARY_Y);
+          lv_chart_set_all_values(c, id(grafiek_reeks), LV_CHART_POINT_NONE);
+          id(grafiek) = c;
+
+  # Voegt elke 5 minuten een punt toe (gat als er geen actuele meting is) en schaalt de Y-as
+  - id: grafiek_punt
+    then:
+      - lambda: |-
+          auto &h = id(historiek);
+          float t = id(meting_actueel).state ? id(watertemperatuur).state : NAN;
+          h.push_back(t);
+          if (h.size() > 288) h.erase(h.begin());
+
+          float lo = NAN, hi = NAN;
+          for (float v : h) {
+            if (std::isnan(v)) continue;
+            if (std::isnan(lo) || v < lo) lo = v;
+            if (std::isnan(hi) || v > hi) hi = v;
+          }
+
+          // Y-as: hele graden, minstens 2 °C bereik, in tienden van een graad
+          int ymin = 20, ymax = 30;
+          if (!std::isnan(lo)) {
+            ymin = (int) floorf(lo - 0.5f);
+            ymax = (int) ceilf(hi + 0.5f);
+            if (ymax - ymin < 2) { ymin -= 1; ymax += 1; }
+          }
+          char buf[16];
+          snprintf(buf, sizeof(buf), "%d °C", ymax);
+          lv_label_set_text(id(lbl_ymax), buf);
+          snprintf(buf, sizeof(buf), "%.1f °C", (ymin + ymax) / 2.0f);
+          lv_label_set_text(id(lbl_ymid), buf);
+          snprintf(buf, sizeof(buf), "%d °C", ymin);
+          lv_label_set_text(id(lbl_ymin), buf);
+
+          char mm[48];
+          if (std::isnan(lo)) snprintf(mm, sizeof(mm), "24 u: min --.-  max --.-");
+          else snprintf(mm, sizeof(mm), "24 u: min %.1f  max %.1f", lo, hi);
+          lv_label_set_text(id(lbl_minmax), mm);
+
+          if (id(grafiek) == nullptr) return;
+          lv_chart_set_axis_range(id(grafiek), LV_CHART_AXIS_PRIMARY_Y, ymin * 10, ymax * 10);
+          lv_chart_set_next_value(id(grafiek), id(grafiek_reeks),
+                                  std::isnan(t) ? LV_CHART_POINT_NONE : (int32_t) lroundf(t * 10.0f));
+
+  # Grote temperatuur en status op tab 1
+  - id: toon_temperatuur
+    then:
+      - lambda: |-
+          char buf[48];
+          bool ok = id(meting_actueel).state;
+          float t = id(watertemperatuur).state;
+          if (!std::isnan(t)) snprintf(buf, sizeof(buf), "%.1f °C", t);
+          else snprintf(buf, sizeof(buf), "--.- °C");
+          lv_label_set_text(id(lbl_temp), buf);
+          lv_obj_set_style_text_color(id(lbl_temp),
+              lv_color_hex(ok ? 0xF8FAFC : 0x64748B), LV_PART_MAIN);
+
+          if (ok) {
+            auto nu = id(klok).now();
+            if (nu.is_valid()) snprintf(buf, sizeof(buf), "Gemeten om %s", nu.strftime("%H:%M").c_str());
+            else snprintf(buf, sizeof(buf), "Meting actueel");
+            lv_obj_set_style_text_color(id(lbl_status), lv_color_hex(0x4ADE80), LV_PART_MAIN);
+          } else if (id(laatste_meting_ms) == 0) {
+            snprintf(buf, sizeof(buf), "Wachten op de regelaar...");
+            lv_obj_set_style_text_color(id(lbl_status), lv_color_hex(0xFACC15), LV_PART_MAIN);
+          } else {
+            uint32_t min = (millis() - id(laatste_meting_ms)) / 60000;
+            snprintf(buf, sizeof(buf), "Geen antwoord van de regelaar (%u min)", (unsigned) min);
+            lv_obj_set_style_text_color(id(lbl_status), lv_color_hex(0xF87171), LV_PART_MAIN);
+          }
+          lv_label_set_text(id(lbl_status), buf);
+
+  # Alle waarden op tab 2
+  - id: toon_info
+    then:
+      - lambda: |-
+          char buf[96];
+          bool wifi_ok = wifi::global_wifi_component->is_connected();
+
+          // Wi-Fi
+          if (wifi_ok) {
+            snprintf(buf, sizeof(buf), "Verbonden met %s", id(wifi_ssid_txt).state.c_str());
+            lv_obj_set_style_text_color(id(v_wifi), lv_color_hex(0x4ADE80), LV_PART_MAIN);
+          } else {
+            snprintf(buf, sizeof(buf), "Niet verbonden");
+            lv_obj_set_style_text_color(id(v_wifi), lv_color_hex(0xF87171), LV_PART_MAIN);
+          }
+          lv_label_set_text(id(v_wifi), buf);
+          lv_label_set_text(id(v_ip), wifi_ok ? id(wifi_ip).state.c_str() : "-");
+
+          float r = id(wifi_rssi).state;
+          if (wifi_ok && !std::isnan(r)) {
+            int pct = std::max(0, std::min(100, (int) (2 * (r + 100))));
+            snprintf(buf, sizeof(buf), "%d dBm (%d %%)", (int) r, pct);
+          } else snprintf(buf, sizeof(buf), "-");
+          lv_label_set_text(id(v_signaal), buf);
+
+          // Cloud
+          auto code = [](int c, char *out, size_t n) {
+            if (c == 0) snprintf(out, n, "-");
+            else if (c < 0) snprintf(out, n, "fout");
+            else snprintf(out, n, "%d", c);
+          };
+          char a[8], b[8], c[8];
+          code(id(http_thingspeak), a, sizeof(a));
+          code(id(http_adafruit), b, sizeof(b));
+          code(id(http_ubidots), c, sizeof(c));
+          if (!id(cloud_aan).state) {
+            snprintf(buf, sizeof(buf), "Uitgeschakeld");
+            lv_obj_set_style_text_color(id(v_cloud), lv_color_hex(0xFACC15), LV_PART_MAIN);
+          } else if (id(laatste_verzending_ms) == 0) {
+            snprintf(buf, sizeof(buf), "Nog niets verstuurd");
+            lv_obj_set_style_text_color(id(v_cloud), lv_color_hex(0xCBD5E1), LV_PART_MAIN);
+          } else {
+            uint32_t min = (millis() - id(laatste_verzending_ms)) / 60000;
+            snprintf(buf, sizeof(buf), "%u min geleden  TS %s / AIO %s / Ubi %s", (unsigned) min, a, b, c);
+            bool alles_ok = id(http_thingspeak) == 200 && id(http_adafruit) >= 200 && id(http_adafruit) < 300
+                            && id(http_ubidots) >= 200 && id(http_ubidots) < 300;
+            lv_obj_set_style_text_color(id(v_cloud), lv_color_hex(alles_ok ? 0x4ADE80 : 0xF87171), LV_PART_MAIN);
+          }
+          lv_label_set_text(id(v_cloud), buf);
+
+          // Modbus
+          if (id(meting_actueel).state) {
+            snprintf(buf, sizeof(buf), "OK, laatste antwoord %us geleden",
+                     (unsigned) ((millis() - id(laatste_meting_ms)) / 1000));
+            lv_obj_set_style_text_color(id(v_modbus), lv_color_hex(0x4ADE80), LV_PART_MAIN);
+          } else {
+            snprintf(buf, sizeof(buf), id(laatste_meting_ms) == 0 ? "Nog geen antwoord" : "Geen antwoord");
+            lv_obj_set_style_text_color(id(v_modbus), lv_color_hex(0xF87171), LV_PART_MAIN);
+          }
+          lv_label_set_text(id(v_modbus), buf);
+
+          float i3 = id(stroom_ai3).state, i4 = id(stroom_ai4).state;
+          snprintf(buf, sizeof(buf), "AI3 %s mA   AI4 %s mA",
+                   std::isnan(i3) ? "-" : str_sprintf("%.2f", i3).c_str(),
+                   std::isnan(i4) ? "-" : str_sprintf("%.2f", i4).c_str());
+          lv_label_set_text(id(v_stroom), buf);
+          lv_label_set_text(id(v_bron), "${temp_bron}");
+
+          // Uptime en tijd
+          uint32_t s = (uint32_t) id(uptime_s).state;
+          snprintf(buf, sizeof(buf), "%ud %02uu %02um", (unsigned) (s / 86400),
+                   (unsigned) ((s % 86400) / 3600), (unsigned) ((s % 3600) / 60));
+          lv_label_set_text(id(v_uptime), buf);
+          auto nu = id(klok).now();
+          lv_label_set_text(id(v_tijd), nu.is_valid() ? nu.strftime("%d-%m-%Y %H:%M:%S").c_str() : "nog niet gesynchroniseerd");
+          lv_label_set_text(id(v_firmware), id(fw_versie).state.c_str());
+
+# ---------------------------------------------------------------------------
+# LVGL-gebruikersinterface (800 × 480)
+# ---------------------------------------------------------------------------
+lvgl:
+  displays: scherm
+  touchscreens: touch
+  buffer_size: 25%
+  theme:
+    tabview: {}
+  style_definitions:
+    - id: sleutel
+      text_font: montserrat_18
+      text_color: 0x94A3B8
+    - id: waarde
+      text_font: montserrat_18
+      text_color: 0xE2E8F0
+    - id: aslabel
+      text_font: montserrat_14
+      text_color: 0x94A3B8
+  on_idle:
+    # Na 5 minuten zonder aanraking dimmen; tikken maakt het scherm weer helder
+    - timeout: 5min
+      then:
+        - lambda: id(gedimd) = true;
+        - light.turn_on:
+            id: achtergrondlicht
+            brightness: 10%
+  bg_color: 0x0B1320
+  pages:
+    - id: hoofdpagina
+      bg_color: 0x0B1320
+      widgets:
+        - tabview:
+            id: tabs
+            position: TOP
+            size: 100%
+            bg_color: 0x0B1320
+            tab_style:
+              bg_color: 0x111D2E
+              text_font: montserrat_20
+              text_color: 0x94A3B8
+              items:
+                checked:
+                  text_color: 0x38BDF8
+            tabs:
+              # ---------------- Tab 1: temperatuur en grafiek ----------------
+              - name: "Temperatuur"
+                id: tab_temp
+                bg_color: 0x0B1320
+                pad_all: 8
+                widgets:
+                  - label:
+                      id: lbl_temp
+                      align: TOP_LEFT
+                      x: 4
+                      y: 0
+                      text: "--.- °C"
+                      text_font: montserrat_48
+                      text_color: 0x64748B
+                  - label:
+                      id: lbl_status
+                      align: TOP_LEFT
+                      x: 6
+                      y: 60
+                      text: "Wachten op de regelaar..."
+                      text_font: montserrat_18
+                      text_color: 0xFACC15
+                  - label:
+                      align: TOP_RIGHT
+                      x: -4
+                      y: 6
+                      text: "Watertemperatuur zwembad"
+                      text_font: montserrat_20
+                      text_color: 0xE2E8F0
+                  - label:
+                      id: lbl_minmax
+                      align: TOP_RIGHT
+                      x: -4
+                      y: 36
+                      text: "24 u: min --.-  max --.-"
+                      text_font: montserrat_18
+                      text_color: 0x94A3B8
+                  - label:
+                      align: TOP_RIGHT
+                      x: -4
+                      y: 62
+                      text: "1 punt per 5 minuten"
+                      styles: aslabel
+
+                  # Vak voor de grafiek (het chartwidget wordt bij het opstarten aangemaakt)
+                  - obj:
+                      id: grafiek_vak
+                      align: TOP_LEFT
+                      x: 70
+                      y: 96
+                      width: 706
+                      height: 286
+                      pad_all: 0
+                      border_width: 0
+                      bg_opa: TRANSP
+                      scrollable: false
+
+                  # Y-as
+                  - label:
+                      id: lbl_ymax
+                      align: TOP_LEFT
+                      x: 0
+                      y: 88
+                      text: "30 °C"
+                      styles: aslabel
+                  - label:
+                      id: lbl_ymid
+                      align: TOP_LEFT
+                      x: 0
+                      y: 230
+                      text: "25.0 °C"
+                      styles: aslabel
+                  - label:
+                      id: lbl_ymin
+                      align: TOP_LEFT
+                      x: 0
+                      y: 372
+                      text: "20 °C"
+                      styles: aslabel
+
+                  # X-as (288 punten × 5 min = 24 uur)
+                  - label: {align: TOP_LEFT, x: 70, y: 388, text: "-24 u", styles: aslabel}
+                  - label: {align: TOP_LEFT, x: 232, y: 388, text: "-18 u", styles: aslabel}
+                  - label: {align: TOP_LEFT, x: 408, y: 388, text: "-12 u", styles: aslabel}
+                  - label: {align: TOP_LEFT, x: 586, y: 388, text: "-6 u", styles: aslabel}
+                  - label: {align: TOP_RIGHT, x: -4, y: 388, text: "nu", styles: aslabel}
+
+              # ---------------- Tab 2: info en instellingen ----------------
+              - name: "Info"
+                id: tab_info
+                bg_color: 0x0B1320
+                pad_all: 12
+                widgets:
+                  # Linkerkolom: toestand
+                  - label: {align: TOP_LEFT, x: 0, y: 0, text: "Wi-Fi", styles: sleutel}
+                  - label: {id: v_wifi, align: TOP_LEFT, x: 150, y: 0, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 34, text: "IP-adres", styles: sleutel}
+                  - label: {id: v_ip, align: TOP_LEFT, x: 150, y: 34, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 68, text: "Signaal", styles: sleutel}
+                  - label: {id: v_signaal, align: TOP_LEFT, x: 150, y: 68, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 102, text: "Cloud", styles: sleutel}
+                  - label: {id: v_cloud, align: TOP_LEFT, x: 150, y: 102, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 136, text: "Modbus", styles: sleutel}
+                  - label: {id: v_modbus, align: TOP_LEFT, x: 150, y: 136, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 170, text: "Stroom", styles: sleutel}
+                  - label: {id: v_stroom, align: TOP_LEFT, x: 150, y: 170, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 204, text: "Bron", styles: sleutel}
+                  - label: {id: v_bron, align: TOP_LEFT, x: 150, y: 204, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 238, text: "Uptime", styles: sleutel}
+                  - label: {id: v_uptime, align: TOP_LEFT, x: 150, y: 238, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 272, text: "Tijd", styles: sleutel}
+                  - label: {id: v_tijd, align: TOP_LEFT, x: 150, y: 272, text: "-", styles: waarde}
+                  - label: {align: TOP_LEFT, x: 0, y: 306, text: "Firmware", styles: sleutel}
+                  - label:
+                      id: v_firmware
+                      align: TOP_LEFT
+                      x: 150
+                      y: 306
+                      width: 380
+                      long_mode: WRAP
+                      text: "-"
+                      styles: waarde
+
+                  # Rechterkolom: instellingen
+                  - label: {align: TOP_RIGHT, x: -10, y: 0, text: "Helderheid", styles: sleutel}
+                  - slider:
+                      id: sl_helderheid
+                      align: TOP_RIGHT
+                      x: -10
+                      y: 32
+                      width: 200
+                      min_value: 10
+                      max_value: 100
+                      value: 80
+                      on_release:
+                        - lambda: id(helderheid) = (int) x;
+                        - light.turn_on:
+                            id: achtergrondlicht
+                            brightness: !lambda return x / 100.0f;
+
+                  - label: {align: TOP_RIGHT, x: -80, y: 82, text: "Cloud", styles: sleutel}
+                  - switch:
+                      id: sw_cloud
+                      align: TOP_RIGHT
+                      x: -10
+                      y: 78
+                      state:
+                        checked: true
+                      on_value:
+                        - if:
+                            condition:
+                              lambda: return x;
+                            then:
+                              - switch.turn_on: cloud_aan
+                            else:
+                              - switch.turn_off: cloud_aan
+
+                  - button:
+                      id: knop_versturen
+                      align: TOP_RIGHT
+                      x: -10
+                      y: 136
+                      width: 200
+                      height: 50
+                      bg_color: 0x0369A1
+                      widgets:
+                        - label: {align: CENTER, text: "Nu versturen", text_font: montserrat_18}
+                      on_click:
+                        - script.execute: publiceer
+                        - lvgl.label.update:
+                            id: v_cloud
+                            text: "Bezig met versturen..."
+
+                  - button:
+                      id: knop_herstart
+                      align: TOP_RIGHT
+                      x: -10
+                      y: 206
+                      width: 200
+                      height: 50
+                      bg_color: 0x7F1D1D
+                      widgets:
+                        - label: {align: CENTER, text: "Herstarten (lang)", text_font: montserrat_18}
+                      on_long_press:
+                        - button.press: herstart
+
+                  - label:
+                      align: TOP_RIGHT
+                      x: -10
+                      y: 270
+                      width: 200
+                      long_mode: WRAP
+                      text: "Na 5 min zonder aanraking dimt het scherm. Tik om te wekken."
+                      text_font: montserrat_14
+                      text_color: 0x64748B
+
+  on_boot:
+    - script.execute: maak_grafiek
+    # Helderheid en schakelaar gelijkzetten met de bewaarde instellingen
+    - lvgl.slider.update:
+        id: sl_helderheid
+        value: !lambda return id(helderheid);
+    - light.turn_on:
+        id: achtergrondlicht
+        brightness: !lambda return id(helderheid) / 100.0f;
+    - lvgl.widget.update:
+        id: sw_cloud
+        state:
+          checked: !lambda return id(cloud_aan).state;
