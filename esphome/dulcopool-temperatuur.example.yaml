@@ -14,6 +14,14 @@ substitutions:
   #   temp_e1  = register 41203 (meetwaarde van regelkanaal E1)
   temp_bron: temp_ai3
 
+  # Waterkwaliteit: alleen lokaal (webpagina en log), gaat NIET naar de cloud.
+  # Kies na de test ter plaatse welke ingang wat meet (README §8.4):
+  #   sensor_pi1 / sensor_pi2 = registers 42001 / 42003 (potentiometrisch: pH of redox)
+  #   sensor_ai1 / sensor_ai2 = registers 42005 / 42007 (meestal chloor)
+  ph_bron: sensor_pi1
+  redox_bron: sensor_pi2
+  chloor_bron: sensor_ai1
+
   publish_interval: 15min
 
   # Niet-geheime cloudgegevens
@@ -142,7 +150,126 @@ sensor:
     unit_of_measurement: mA
     accuracy_decimals: 2
 
-  # De waarde die naar de cloud gaat
+  # Sensorwaarden van de ingangen PI1/PI2 (pH, redox) en AI1/AI2 (chloor) in de eenheid
+  # die op de regelaar is ingesteld. Alle vier zichtbaar, zodat je ter plaatse kunt zien welke
+  # ingang wat meet; pH, Redox en Vrij chloor hieronder kopiëren de gekozen bron.
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: sensor_pi1
+    name: "PI1 sensorwaarde (42001)"
+    register_type: holding
+    address: 2000
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: sensor_pi2
+    name: "PI2 sensorwaarde (42003)"
+    register_type: holding
+    address: 2002
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: sensor_ai1
+    name: "AI1 sensorwaarde (42005)"
+    register_type: holding
+    address: 2004
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: sensor_ai2
+    name: "AI2 sensorwaarde (42007)"
+    register_type: holding
+    address: 2006
+    value_type: FP32_R
+    accuracy_decimals: 2
+
+  # Ruwe ingangssignalen, om de bekabeling te controleren
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: spanning_pi1
+    name: "PI1 spanning (41001)"
+    register_type: holding
+    address: 1000
+    value_type: FP32_R
+    unit_of_measurement: mV
+    accuracy_decimals: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: spanning_pi2
+    name: "PI2 spanning (41003)"
+    register_type: holding
+    address: 1002
+    value_type: FP32_R
+    unit_of_measurement: mV
+    accuracy_decimals: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: stroom_ai1
+    name: "AI1 stroom (41005)"
+    register_type: holding
+    address: 1004
+    value_type: FP32_R
+    unit_of_measurement: mA
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: dulcopool
+    id: stroom_ai2
+    name: "AI2 stroom (41007)"
+    register_type: holding
+    address: 1006
+    value_type: FP32_R
+    unit_of_measurement: mA
+    accuracy_decimals: 2
+
+  # Waterkwaliteit (alleen lokaal: webpagina van de module en log)
+  - platform: copy
+    source_id: ${ph_bron}
+    id: ph
+    name: "pH"
+    icon: mdi:ph
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - lambda: |-
+          if (std::isnan(x) || x < 0.0f || x > 14.0f) return {};
+          return x;
+
+  - platform: copy
+    source_id: ${redox_bron}
+    id: redox
+    name: "Redox"
+    unit_of_measurement: mV
+    icon: mdi:flash-triangle-outline
+    state_class: measurement
+    accuracy_decimals: 0
+    filters:
+      - lambda: |-
+          if (std::isnan(x) || x < -2000.0f || x > 2000.0f) return {};
+          return x;
+
+  - platform: copy
+    source_id: ${chloor_bron}
+    id: chloor
+    name: "Vrij chloor"
+    unit_of_measurement: mg/l
+    icon: mdi:flask-outline
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - lambda: |-
+          if (std::isnan(x) || x < 0.0f || x > 20.0f) return {};
+          return x;
+
+  # De enige waarde die naar de cloud gaat
   - platform: copy
     source_id: ${temp_bron}
     id: watertemperatuur
@@ -197,6 +324,8 @@ script:
           condition:
             binary_sensor.is_on: meting_actueel
           then:
+            # Alleen de watertemperatuur (en op ThingSpeak het Wi-Fi-signaal) gaat naar de cloud.
+            # pH, redox en chloor blijven bewust lokaal.
             - logger.log:
                 format: "Versturen: %.2f °C"
                 args: [id(watertemperatuur).state]
