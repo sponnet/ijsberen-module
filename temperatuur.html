@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watertemperatuur</title>
+<!--
+  Mini-widget voor de clubwebsite: toont de laatste watertemperatuur van ThingSpeak.
+  Insluiten (rechtsboven op de site):
+    <iframe src="…/temperatuur.html" width="240" height="64" title="Watertemperatuur"
+            style="border:0;overflow:hidden" loading="lazy"></iframe>
+  Opties in de URL: ?kanaal=3588555  (ThingSpeak Channel ID)
+  Leest field1 via fields/1/last.json: dat geeft de laatste meting mét een temperatuur,
+  ook als er daarna testpunten met alleen het Wi-Fi-signaal zijn binnengekomen.
+-->
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=oswald:400,500&display=swap">
+<style>
+  :root {
+    --blauw: #457ab0;      /* banier van de clubsite */
+    --navy: #26517d;       /* rand van de banier */
+    --tekst: #ffffff;
+    --zacht: rgba(255, 255, 255, .78);
+    --live: #7ee08a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: transparent; overflow: hidden; }
+  body {
+    font-family: Oswald, "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
+    color: var(--tekst);
+    -webkit-font-smoothing: antialiased;
+  }
+  a.kaart {
+    display: flex; align-items: center; gap: 12px;
+    height: 100%; padding: 6px 14px 6px 12px;
+    background: var(--blauw);
+    border-top: 4px solid var(--navy);
+    border-radius: 0 0 6px 6px;
+    color: inherit; text-decoration: none;
+    transition: background .2s;
+  }
+  a.kaart:hover, a.kaart:focus-visible { background: #4f86bd; outline: none; }
+  .icoon { flex: none; width: 26px; height: 26px; opacity: .95; }
+  .waarde {
+    font-size: 32px; font-weight: 500; line-height: 1; letter-spacing: .01em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .waarde small { font-size: 18px; font-weight: 400; margin-left: 1px; }
+  .info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .label {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--zacht);
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .stip { width: 7px; height: 7px; border-radius: 50%; background: var(--live); display: none; }
+  .live .stip { display: inline-block; animation: puls 2.4s ease-in-out infinite; }
+  .meta { font-size: 13px; color: var(--tekst); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oud .waarde { opacity: .6; }
+  @keyframes puls { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .live .stip { animation: none; } }
+</style>
+</head>
+<body>
+<a class="kaart" id="kaart" target="_blank" rel="noopener" href="https://thingspeak.mathworks.com/channels/3588555"
+   title="Bekijk het verloop van de watertemperatuur">
+  <svg class="icoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M14 14.76V4.5a2 2 0 0 0-4 0v10.26a4 4 0 1 0 4 0Z"/>
+    <path d="M12 9v7.5"/>
+    <path d="M17.5 6h2.5M17.5 9.5h2.5"/>
+  </svg>
+  <div class="waarde" id="waarde">–</div>
+  <div class="info" aria-live="polite">
+    <span class="label"><span class="stip"></span>Water</span>
+    <span class="meta" id="meta">laden…</span>
+  </div>
+</a>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const kanaal = (params.get('kanaal') || '3588555').replace(/\D/g, '');
+  const VERNIEUW_MS = 90 * 1000;   // elke 90 s opnieuw ophalen
+  const OUD_NA_MIN = 45;           // 3 gemiste updates = niet meer actueel
+
+  const kaart = document.getElementById('kaart');
+  const waardeEl = document.getElementById('waarde');
+  const metaEl = document.getElementById('meta');
+  kaart.href = `https://thingspeak.mathworks.com/channels/${kanaal}`;
+
+  const TZ = 'Europe/Brussels';
+  const fmtTijd = new Intl.DateTimeFormat('nl-BE', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  const fmtDag = new Intl.DateTimeFormat('nl-BE', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'numeric' });
+  const fmtGetal = new Intl.NumberFormat('nl-BE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  function toon(t, meta, staat) {
+    waardeEl.innerHTML = t == null ? '–' : `${fmtGetal.format(t)}<small>°C</small>`;
+    metaEl.textContent = meta;
+    kaart.classList.toggle('live', staat === 'live');
+    kaart.classList.toggle('oud', staat === 'oud');
+    kaart.setAttribute('aria-label', t == null ? `Watertemperatuur: ${meta}` : `Watertemperatuur ${fmtGetal.format(t)} graden, ${meta}`);
+  }
+
+  async function laad() {
+    try {
+      const res = await fetch(`https://api.thingspeak.com/channels/${kanaal}/fields/1/last.json`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status);
+      const rij = await res.json();             // -1 zolang er nog geen temperatuur is
+      const t = rij && typeof rij === 'object' ? parseFloat(rij.field1) : NaN;
+      if (!Number.isFinite(t)) return toon(null, 'nog geen meting', '');
+      const op = new Date(rij.created_at);
+      const minuten = (Date.now() - op) / 6e4;
+      const vandaag = fmtDag.format(op) === fmtDag.format(new Date());
+      if (minuten <= OUD_NA_MIN) {
+        toon(t, `om ${fmtTijd.format(op)}`, 'live');
+      } else {
+        toon(t, vandaag ? `laatst om ${fmtTijd.format(op)}` : `laatst ${fmtDag.format(op)}`, 'oud');
+      }
+    } catch (e) {
+      toon(null, 'even niet beschikbaar', '');
+    }
+  }
+
+  laad();
+  setInterval(laad, VERNIEUW_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) laad(); });
+})();
+</script>
+</body>
+</html>
