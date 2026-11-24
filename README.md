@@ -80,6 +80,7 @@ flowchart LR
 | [esphome/dulcopool-temperatuur.example.yaml](esphome/dulcopool-temperatuur.example.yaml) | ESPHome-configuratie (sjabloon) → kopieer naar `dulcopool-temperatuur.yaml` | ✓ |
 | [esphome/secrets.example.yaml](esphome/secrets.example.yaml) | Sjabloon voor Wi-Fi, wachtwoorden en API-sleutels → kopieer naar `secrets.yaml` | ✓ |
 | `esphome/dulcopool-temperatuur.yaml`, `esphome/secrets.yaml` | Jouw ingevulde versies | ✗ (`.gitignore`) |
+| [ES3C50P/](ES3C50P/README.md) | Variant met 5"-touchscreen (ESP32-S3, ES3C50P): grafiek en infoscherm met LVGL | ✓ (behalve eigen YAML en secrets) |
 | [esp32-rs485-montageplaat.stl](esp32-rs485-montageplaat.stl) | Montageplaat om te 3D-printen (§6) | ✓ |
 | [esp32-rs485-montageplaat.sc](esp32-rs485-montageplaat.sc) | Parametrisch ontwerp van de montageplaat (SolidCraft) | ✓ |
 | [docs/aansluitschema_dulcopool_esp32.svg](docs/aansluitschema_dulcopool_esp32.svg) | Aansluitschema (§7) | ✓ |
@@ -108,6 +109,9 @@ Alle elektronica werkt op **3,3 V**, zodat de pinnen van de ESP32 veilig zijn.
 | Behuizing | IP65-doos met wartels, binnenmaat minstens ± 110 × 100 mm en ± 45 mm diep. In een technische ruimte van een zwembad is het vochtig en zit chloor in de lucht. | standaard |
 | USB-C-**data**kabel | Alleen om de eerste keer te flashen; daarna gaan updates via Wi-Fi | standaard |
 | Alternatieve voeding | 5 V USB-C-adapter (min. 1 A), als klem 17 van de regelaar al belast is (§7.3) | standaard |
+
+> **Met scherm:** in plaats van de NodeMCU kan ook een ES3C50P (ESP32-S3 met 5"-touchscreen) de H28 aansturen.
+> Pinnen, voeding en firmware staan in [ES3C50P/README.md](ES3C50P/README.md).
 
 > **Gebruik niet** de goedkope 5 V-only MAX485-module (art. `Y26`). Die zet 5 V op de RX-pin van
 > de ESP32 en kan het bord beschadigen.
@@ -268,6 +272,11 @@ is dat `value_type: FP32_R`.
 | E1 meetwaarde (41203) | 41203 | 1202 | Meetwaarde van regelkanaal E1 (meestal pH of chloor) |
 | AI3 stroom (41009) | 41009 | 1008 | Ruwe ingangsstroom AI3 in mA, ter controle |
 | AI4 stroom (41011) | 41011 | 1010 | Ruwe ingangsstroom AI4 in mA, ter controle |
+| PI1 / PI2 sensorwaarde (42001 / 42003) | 42001 / 42003 | 2000 / 2002 | Potentiometrische ingangen: pH en redox (§8.4) |
+| AI1 / AI2 sensorwaarde (42005 / 42007) | 42005 / 42007 | 2004 / 2006 | Analoge ingangen, meestal chloor (§8.4) |
+| PI1 / PI2 spanning (41001 / 41003) | 41001 / 41003 | 1000 / 1002 | Ruwe elektrodespanning in mV, ter controle |
+| AI1 / AI2 stroom (41005 / 41007) | 41005 / 41007 | 1004 / 1006 | Ruwe ingangsstroom in mA, ter controle |
+| pH, Redox, Vrij chloor | – | – | Kopie van de gekozen bron (§8.4); **alleen lokaal, niet naar de cloud** |
 
 Omrekening bij de standaardschaal −5 … +45 °C: `T = −5 + (I_mA − 4) / 16 × 50`
 (bv. 6,88 mA = 4,0 °C). Een lege ingang geeft ± 0 mA.
@@ -321,6 +330,25 @@ Zet de juiste bron in de YAML; alleen die gaat naar de cloud:
 temp_bron: temp_ai3   # of temp_ai4, of temp_e1
 ```
 
+### 8.4 pH, redox en chloor
+
+De module leest ook de waterkwaliteit uit. Die waarden staan **alleen op de webpagina van de module**
+(met wachtwoord) en in de log. Ze gaan **niet** naar ThingSpeak, Adafruit IO of Ubidots, en dus ook
+niet naar de website. Een tijdelijke piek zonder uitleg zou bezoekers alleen ongerust maken.
+
+Welke ingang wat meet, hangt af van de bekabeling (sensoringangen op klem 1–12, §7.5). Standaard staat in de YAML:
+
+```yaml
+ph_bron: sensor_pi1      # pH-elektrode op PI1
+redox_bron: sensor_pi2   # redox-elektrode (ORP) op PI2
+chloor_bron: sensor_ai1  # chloorsensor (4–20 mA) op AI1
+```
+
+Controleer ter plaatse: vergelijk *PI1*, *PI2*, *AI1* en *AI2* op de webpagina met het scherm van de
+regelaar, en pas de bron aan als het anders is. Filters gooien onmogelijke waarden weg: pH buiten
+0–14, redox buiten ±2000 mV, chloor buiten 0–20 mg/l. Een niet-aangesloten ingang geeft dan
+"onbekend".
+
 ## 9. Firmware (ESPHome)
 
 ### 9.1 Wat de configuratie doet
@@ -330,9 +358,10 @@ temp_bron: temp_ai3   # of temp_ai4, of temp_e1
 | Bord | `esp32dev`, framework ESP-IDF |
 | Modbus | UART op GPIO17 (TX) / GPIO16 (RX), 19200 8N2, slave-adres 1, elke 30 s |
 | Sensoren | AI3, AI4, E1 en de ruwe stromen van AI3/AI4; `Watertemperatuur` = kopie van `temp_bron`, gefilterd op −5 … 45 °C |
+| Waterkwaliteit | PI1, PI2, AI1, AI2 en hun ruwe signalen; `pH`, `Redox` en `Vrij chloor` = kopie van `ph_bron`, `redox_bron`, `chloor_bron` (§8.4). Alleen lokaal. |
 | Bewaking | "Meting actueel" staat aan zolang er de laatste 2 minuten een geldige temperatuur binnenkwam |
 | Versturen | Elke 15 min en 2 min na het opstarten; alleen als "Meting actueel" aan staat |
-| Cloud | HTTPS-POST naar ThingSpeak (`field1` = temperatuur, `field2` = Wi-Fi-signaal), Adafruit IO en Ubidots; certificaten worden gecontroleerd |
+| Cloud | **Alleen de watertemperatuur**: HTTPS-POST naar ThingSpeak (`field1` = temperatuur, `field2` = Wi-Fi-signaal), Adafruit IO en Ubidots; certificaten worden gecontroleerd |
 | Webpagina | `http://dulcopool-temperatuur.local` (gebruiker `admin`): live waarden, log, knoppen "Nu naar de cloud sturen" en "Herstarten" |
 | Wi-Fi | Bij geen verbinding na ± 1 min: hotspot `dulcopool-temperatuur fallback` om een nieuw netwerk in te stellen |
 | Updates | Via Wi-Fi (OTA), met wachtwoord |
@@ -407,6 +436,7 @@ module op het zwembad, dan kan dat alleen vanaf een toestel op het netwerk van h
    (§7.3), regelaar aanzetten. De module start mee.
 4. Open de webpagina. Binnen 30 s verschijnen waarden bij AI3, AI4 en E1. Kies de bron die de
    watertemperatuur toont (§8.3) en flash via Wi-Fi als het niet AI3 is.
+   Doe hetzelfde voor pH, redox en chloor (§8.4).
 5. **Watertemperatuur** heeft een waarde en **Meting actueel** staat aan.
 6. Druk op **Nu naar de cloud sturen**. In de log:
 
